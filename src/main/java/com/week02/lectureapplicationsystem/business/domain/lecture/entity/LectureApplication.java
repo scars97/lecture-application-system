@@ -9,6 +9,12 @@ import java.time.LocalDateTime;
 @Getter
 @NoArgsConstructor
 @AllArgsConstructor
+@Table(
+    name = "lecture_application",
+    uniqueConstraints = {
+        @UniqueConstraint(columnNames = {"lecture_id", "memberId"})
+    }
+)
 public class LectureApplication {
 
     @Id

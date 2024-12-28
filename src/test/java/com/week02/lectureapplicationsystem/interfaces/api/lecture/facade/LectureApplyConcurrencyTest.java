@@ -1,6 +1,7 @@
 package com.week02.lectureapplicationsystem.interfaces.api.lecture.facade;
 
 import com.week02.lectureapplicationsystem.business.domain.lecture.entity.Lecture;
+import com.week02.lectureapplicationsystem.business.domain.lecture.entity.LectureApplication;
 import com.week02.lectureapplicationsystem.business.domain.lecture.persistence.LectureApplicationRepository;
 import com.week02.lectureapplicationsystem.business.domain.lecture.persistence.LectureCommandRepository;
 import com.week02.lectureapplicationsystem.interfaces.api.lecture.dto.LectureApplyRequest;
@@ -13,6 +14,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.jdbc.Sql;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -84,5 +86,47 @@ public class LectureApplyConcurrencyTest {
         //then
         assertThat(successCount.get()).isEqualTo(capacity);
         assertThat(failureCount.get()).isEqualTo(totalMembers - capacity);
+    }
+
+    @DisplayName("동일한 회원이 같은 강의를 5번 신청했을 때, 1번만 성공해야 한다.")
+    @Test
+    void shouldSuccessOne_whenApplyDuplicateLecture() throws InterruptedException {
+        // given
+        int tryCount = 5;
+        String memberId = "test1234";
+
+        ExecutorService executor = Executors.newFixedThreadPool(tryCount);
+        CountDownLatch latch = new CountDownLatch(tryCount);
+
+        AtomicInteger successCount = new AtomicInteger(0);
+        AtomicInteger failureCount = new AtomicInteger(0);
+
+        // when
+        for (int i = 0; i < tryCount; i++) {
+            executor.submit(() -> {
+                try {
+                    lectureApplyFacade.applyForLecture(new LectureApplyRequest(1L, memberId));
+                    successCount.incrementAndGet();
+                } catch (IllegalArgumentException e) {
+                    failureCount.incrementAndGet();
+                } finally {
+                    latch.countDown();
+                }
+            });
+        }
+
+        latch.await();
+        executor.shutdown();
+
+        //then
+        assertThat(successCount.get()).isOne();
+        assertThat(failureCount.get()).isEqualTo(4);
+
+        List<LectureApplication> appliedLecturesByMemberId = applicationRepository.getAppliedLecturesByMemberId(memberId);
+        assertThat(appliedLecturesByMemberId).hasSize(1)
+                .extracting("id", "memberId")
+                .containsExactly(
+                        tuple(1L, memberId)
+                );
     }
 }
